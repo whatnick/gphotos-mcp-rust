@@ -1,84 +1,294 @@
 # gphotos-mcp-rust
 
 ![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
+[![CI](https://github.com/whatnick/gphotos-mcp-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/whatnick/gphotos-mcp-rust/actions/workflows/ci.yml)
+[![Release](https://github.com/whatnick/gphotos-mcp-rust/actions/workflows/release.yml/badge.svg)](https://github.com/whatnick/gphotos-mcp-rust/releases/latest)
 
-Rust bootstrap for a Google Photos MCP server with OAuth-based login and tool-based access to common Google Photos use cases.
+Rust MCP server for Google Photos with OAuth2 login and tool-based access to photos, albums, and the photo picker.
 
-## Implemented MCP tools
+---
 
-- `auth_status`
-- `start_auth`
-- `search_photos`
-- `search_media_by_filter`
-- `get_photo`
-- `list_albums`
-- `get_album`
-- `create_album`
-- `list_album_photos`
-- `list_media_items`
-- `create_picker_session`
-- `poll_picker_session`
+## Download
 
-## Quick start for personal use
+Pre-built binaries are attached to every [GitHub Release](https://github.com/whatnick/gphotos-mcp-rust/releases/latest).
 
-1. Create an OAuth client in Google Cloud and keep the consent screen in **Testing**.
-2. Add your own email address under **Test users** on the OAuth consent screen.
-3. If Google shows the unverified-app warning, choose **Advanced** and continue as your own test user.
-4. Add your callback URI (for example `http://localhost:3000/auth/callback`).
-5. Copy and fill env vars:
+| Platform | Architecture | Download |
+|---|---|---|
+| Linux | x86\_64 | [gphotos-mcp-rust-x86_64-unknown-linux-gnu.tar.gz](https://github.com/whatnick/gphotos-mcp-rust/releases/latest/download/gphotos-mcp-rust-x86_64-unknown-linux-gnu.tar.gz) |
+| Linux | ARM64 | [gphotos-mcp-rust-aarch64-unknown-linux-gnu.tar.gz](https://github.com/whatnick/gphotos-mcp-rust/releases/latest/download/gphotos-mcp-rust-aarch64-unknown-linux-gnu.tar.gz) |
+| macOS | Apple Silicon | [gphotos-mcp-rust-aarch64-apple-darwin.tar.gz](https://github.com/whatnick/gphotos-mcp-rust/releases/latest/download/gphotos-mcp-rust-aarch64-apple-darwin.tar.gz) |
+| macOS | Intel | [gphotos-mcp-rust-x86_64-apple-darwin.tar.gz](https://github.com/whatnick/gphotos-mcp-rust/releases/latest/download/gphotos-mcp-rust-x86_64-apple-darwin.tar.gz) |
+| Windows | x86\_64 | [gphotos-mcp-rust-x86_64-pc-windows-msvc.zip](https://github.com/whatnick/gphotos-mcp-rust/releases/latest/download/gphotos-mcp-rust-x86_64-pc-windows-msvc.zip) |
+
+SHA256 checksums are published as `SHA256SUMS.txt` on each release.
+
+### Install via one-liner (Linux / macOS)
+
+```bash
+# Linux x86_64
+curl -fsSL https://github.com/whatnick/gphotos-mcp-rust/releases/latest/download/gphotos-mcp-rust-x86_64-unknown-linux-gnu.tar.gz | tar xz
+chmod +x gphotos-mcp-rust
+
+# macOS Apple Silicon
+curl -fsSL https://github.com/whatnick/gphotos-mcp-rust/releases/latest/download/gphotos-mcp-rust-aarch64-apple-darwin.tar.gz | tar xz
+chmod +x gphotos-mcp-rust
+```
+
+### Build from source
+
+```bash
+cargo install --locked --git https://github.com/whatnick/gphotos-mcp-rust
+```
+
+---
+
+## Prerequisites: Google Cloud OAuth app
+
+1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable the **Google Photos Library API** and **Google Photos Picker API**.
+3. Create an **OAuth 2.0 Client ID** (Application type: Web application).
+4. Keep the consent screen in **Testing** and add your own account as a test user.
+5. Add `http://localhost:3000/auth/callback` as an authorised redirect URI.
+6. Note your **Client ID** and **Client Secret**.
+
+---
+
+## Configuration
+
+Copy the example env file and fill in your credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-6. Run:
+`.env` variables:
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | ✅ | — | OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | ✅ | — | OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | | `http://localhost:3000/auth/callback` | OAuth callback URL |
+| `HOST` | | `127.0.0.1` | Listen address |
+| `PORT` | | `3000` | Listen port |
+| `TOKENS_PATH` | | `~/.config/gphotos-mcp-rust/tokens.json` | Token storage path |
+
+---
+
+## First-time OAuth login
+
+The server must be running before connecting any agent. Start it once and complete the browser consent flow:
 
 ```bash
-cargo run
+# Export credentials (or use a .env file)
+export GOOGLE_CLIENT_ID=your_client_id
+export GOOGLE_CLIENT_SECRET=your_client_secret
+
+./gphotos-mcp-rust
 ```
 
-7. Start auth:
+In another terminal:
 
 ```bash
-curl http://127.0.0.1:3000/auth/start
+# Get the auth URL
+curl -s http://127.0.0.1:3000/auth/start | jq -r .auth_url
 ```
 
-8. Open returned `auth_url`, complete consent, then use `/mcp`.
+Open the returned URL in a browser, approve access, and Google will redirect to `/auth/callback`. Tokens are saved to `~/.config/gphotos-mcp-rust/tokens.json` with `0600` permissions and are reused on restart — you only need to do this once unless you revoke access.
 
-## OAuth login before MCP usage
-
-This server requires an OAuth login before most MCP tools will work.
-The current consent flow requests broader Google Photos access so album and picker tools can use the same token set.
-It is intended for a personal test app / single-user setup, not a public multi-user deployment.
-
-If you are the only user, you do not need Google's formal verification process. Keep the app in Testing and only authorize with the test-user account you added.
-
-1. Start the server:
+Confirm authentication:
 
 ```bash
-cargo run
+curl -s http://127.0.0.1:3000/health
 ```
 
-2. Start the login flow:
+---
+
+## MCP tools
+
+| Tool | Description |
+|---|---|
+| `auth_status` | Check whether the server is authenticated |
+| `start_auth` | Return the OAuth browser URL |
+| `search_photos` | Search photos by feature keyword |
+| `search_media_by_filter` | Search with a structured filter object |
+| `get_photo` | Get details for a single media item |
+| `list_albums` | List albums with pagination |
+| `get_album` | Get a single album by ID |
+| `create_album` | Create a new album |
+| `list_album_photos` | List photos in an album |
+| `list_media_items` | List all media items |
+| `create_picker_session` | Start a Google Photos Picker session |
+| `poll_picker_session` | Poll a picker session and retrieve selected items |
+
+---
+
+## Setup with coding agents
+
+This server exposes an **HTTP MCP endpoint** at `http://localhost:3000/mcp`. Start the server before launching any agent session. All agents below connect to that endpoint — no stdio wrapper is needed.
+
+### Crush
+
+Add to `crush.json` in your project root or `~/.config/crush/crush.json`:
+
+```json
+{
+  "mcp": {
+    "google-photos": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "google-photos": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+### Cursor
+
+Create or edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "google-photos": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+### VS Code (GitHub Copilot)
+
+Create `.vscode/mcp.json` in your workspace:
+
+```json
+{
+  "servers": {
+    "google-photos": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+### Kiro
+
+Create or edit `.kiro/settings/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "google-photos": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+### Windsurf
+
+Edit `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "google-photos": {
+      "serverUrl": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+---
+
+## Auto-start the server (optional)
+
+To keep the server running across reboots, install it as a user service.
+
+**Linux (systemd)**
+
+```ini
+# ~/.config/systemd/user/gphotos-mcp-rust.service
+[Unit]
+Description=Google Photos MCP server
+
+[Service]
+ExecStart=/usr/local/bin/gphotos-mcp-rust
+EnvironmentFile=%h/.config/gphotos-mcp-rust/env
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
 
 ```bash
-curl http://127.0.0.1:3000/auth/start
+systemctl --user enable --now gphotos-mcp-rust
 ```
 
-3. Open the returned `auth_url` in a browser and approve access.
-4. After Google redirects to `/auth/callback`, the server stores tokens locally.
-5. Confirm the session:
+**macOS (launchd)**
+
+```xml
+<!-- ~/Library/LaunchAgents/dev.whatnick.gphotos-mcp-rust.plist -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.whatnick.gphotos-mcp-rust</string>
+  <key>ProgramArguments</key>
+  <array><string>/usr/local/bin/gphotos-mcp-rust</string></array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>GOOGLE_CLIENT_ID</key>     <string>your_client_id</string>
+    <key>GOOGLE_CLIENT_SECRET</key> <string>your_client_secret</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+</dict>
+</plist>
+```
 
 ```bash
-curl http://127.0.0.1:3000/health
+launchctl load ~/Library/LaunchAgents/dev.whatnick.gphotos-mcp-rust.plist
 ```
 
-6. Call `auth_status` or any other MCP tool through `/mcp`.
+---
 
-If `auth_status` reports unauthenticated, rerun `/auth/start` and complete the browser consent flow again.
-If you previously authorized the app, revoke access in your Google Account permissions page or delete the local token file before restarting the flow so Google prompts for the expanded scopes again.
+## Security notes
 
-If Google shows a warning screen, that is expected while the app remains in Testing mode; continue only with your own test user account.
+- OAuth state tokens are random (40 chars), single-use, and expire after 10 minutes.
+- Access and refresh tokens are stored in a local file with `0600` permissions.
+- Tokens are never written to logs.
+- CI uses least-privilege permissions, `persist-credentials: false`, and no `pull_request_target` triggers.
+- Weekly `cargo audit` runs via the Security workflow.
+- Pre-commit hooks block accidental secret commits.
+
+### Enable pre-commit locally
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+---
 
 ## MCP endpoint example
 
@@ -86,25 +296,9 @@ If Google shows a warning screen, that is expected while the app remains in Test
 curl -s http://127.0.0.1:3000/mcp \
   -H 'content-type: application/json' \
   -d '{
-    "jsonrpc":"2.0",
-    "id":1,
-    "method":"tools/call",
-    "params":{"name":"auth_status","arguments":{}}
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {"name": "auth_status", "arguments": {}}
   }' | jq
-```
-
-## Security notes
-
-- OAuth state is random, short-lived, and single-use.
-- Tokens are stored in a local file with strict permissions (`0600` on Unix).
-- CI does not use `pull_request_target` and uses least-privilege permissions.
-- Security tests verify workflow hardening controls.
-- Pre-commit hooks are configured to block secret-bearing paths and scan staged diffs for common credential patterns.
-
-### Enable pre-commit locally
-
-```bash
-python3 -m pip install pre-commit
-pre-commit install
-pre-commit run --all-files
 ```
