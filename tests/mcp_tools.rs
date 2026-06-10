@@ -43,9 +43,7 @@ async fn tools_list_contains_oauth_and_picker_tools() {
     assert_eq!(status, StatusCode::OK);
 
     let result = resp.result.expect("result");
-    let tools = result["tools"]
-        .as_array()
-        .expect("tools array");
+    let tools = result["tools"].as_array().expect("tools array");
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|t| t.get("name").and_then(|n| n.as_str()))

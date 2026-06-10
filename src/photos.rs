@@ -249,12 +249,8 @@ impl GooglePhotosClient {
         let session = self
             .authed_picker_get(&format!("/sessions/{session_id}"))
             .await?;
-        let items_path = build_picker_items_path(
-            &self.picker_base_url,
-            session_id,
-            page_size,
-            page_token,
-        )?;
+        let items_path =
+            build_picker_items_path(&self.picker_base_url, session_id, page_size, page_token)?;
         let items = self.authed_picker_get_full(&items_path).await?;
         Ok(json!({
             "session": session,
@@ -285,9 +281,8 @@ fn build_paginated_path(
     page_token: Option<&str>,
 ) -> Result<String, GooglePhotosError> {
     let full = format!("{base_url}{path}");
-    let mut url = Url::parse(&full).map_err(|e| {
-        GooglePhotosError::InvalidInput(format!("Invalid base URL: {e}"))
-    })?;
+    let mut url = Url::parse(&full)
+        .map_err(|e| GooglePhotosError::InvalidInput(format!("Invalid base URL: {e}")))?;
     url.query_pairs_mut()
         .append_pair("pageSize", &page_size.unwrap_or(25).to_string());
     if let Some(token) = page_token {
@@ -303,9 +298,8 @@ fn build_picker_items_path(
     page_token: Option<&str>,
 ) -> Result<String, GooglePhotosError> {
     let full = format!("{picker_base_url}/mediaItems");
-    let mut url = Url::parse(&full).map_err(|e| {
-        GooglePhotosError::InvalidInput(format!("Invalid picker base URL: {e}"))
-    })?;
+    let mut url = Url::parse(&full)
+        .map_err(|e| GooglePhotosError::InvalidInput(format!("Invalid picker base URL: {e}")))?;
     url.query_pairs_mut()
         .append_pair("sessionId", session_id)
         .append_pair("pageSize", &page_size.unwrap_or(25).to_string());
