@@ -1,0 +1,12 @@
+/target
+.env
+tokens.json
+**/tokens.json
+.env.*
+*.credentials.json
+*.secret
+*.pem
+.credentials/
+.secrets/
+.pre-commit-config.local.yaml
+.DS_Store
